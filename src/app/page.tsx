@@ -43,6 +43,24 @@ const cuellos: DataType["cuello"][] = ["V", "Redondo"];
 
 const coll = collection(db, "v");
 
+// 👕 mapa de orden de talles
+const orderMap: Record<string, number> = {
+  // adultos
+  S: 1,
+  M: 2,
+  L: 3,
+  XL: 4,
+  "2XL": 5,
+  "3XL": 6,
+  // niños
+  "6": 7,
+  "8": 8,
+  "10": 9,
+  "12": 10,
+  "14": 11,
+  "16": 12,
+};
+
 export default function HomePage() {
   const [items, setItems] = useState<DataType[]>([]);
   const [loadingBtn, setLoadingBtn] = useState<string | null>(null);
@@ -92,7 +110,7 @@ export default function HomePage() {
   const getBackground = (cantidad: number) => {
     if (cantidad === 0 || cantidad < 3) return "#ffecec"; // rojo pastel
     if (cantidad >= 3 && cantidad <= 5) return "#fffbe6"; // amarillo pastel
-    return "#dffce2ff"; // verde pastel
+    return "#b9fbc0"; // verde pastel
   };
 
   // 🔖 etiqueta según cantidad
@@ -120,7 +138,7 @@ export default function HomePage() {
         {/* 🔹 Botón de navegación */}
         <div style={{ textAlign: "center", marginBottom: 24 }}>
           <Link href="/remeras">
-            <Button type="primary" size="large" >
+            <Button type="primary" size="large">
               Ver Lista de Remeras
             </Button>
           </Link>
@@ -142,14 +160,23 @@ export default function HomePage() {
 
               if (group.length === 0) return null;
 
+              // 👉 ordena los talles antes de renderizar
+              const sortedGroup = [...group].sort(
+                (a, b) =>
+                  (orderMap[a.talle] ?? 999) - (orderMap[b.talle] ?? 999)
+              );
+
               return (
-                <div key={`${tipo}-${color}-${cuello}`} style={{ marginBottom: 24, padding:'0px 16px' }}>
+                <div
+                  key={`${tipo}-${color}-${cuello}`}
+                  style={{ marginBottom: 24, padding: "0px 16px" }}
+                >
                   <Divider orientation="left">
                     {tipo} - {color} - {cuello}
                   </Divider>
                   <List
                     bordered
-                    dataSource={group}
+                    dataSource={sortedGroup}
                     renderItem={(item) => (
                       <List.Item
                         style={{
