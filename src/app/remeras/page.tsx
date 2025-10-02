@@ -162,7 +162,7 @@ export default function Remeras() {
   ];
 
   return (
-    <div style={{ maxWidth: 900, margin: "50px auto" }}>
+    <div style={{ maxWidth: 900, margin: "50px auto", padding: "0 16px" }}>
 
        <Link href="/">
             <Button variant="outlined" size="large" style={{ marginBottom: 24 }}>
