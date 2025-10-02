@@ -143,7 +143,7 @@ export default function HomePage() {
               if (group.length === 0) return null;
 
               return (
-                <div key={`${tipo}-${color}-${cuello}`} style={{ marginBottom: 24 }}>
+                <div key={`${tipo}-${color}-${cuello}`} style={{ marginBottom: 24, padding:'0px 16px' }}>
                   <Divider orientation="left">
                     {tipo} - {color} - {cuello}
                   </Divider>
