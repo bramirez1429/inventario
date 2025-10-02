@@ -143,6 +143,7 @@ export const TableS: React.FC<TableSProps> = ({
     {
       title: "Acciones",
       key: "operation",
+      width: 170,
       render: (_: unknown, record: DataType, index: number) => {
         const editable = isEditing(record);
         return editable ? (

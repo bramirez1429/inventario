@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   collection,
   addDoc,
@@ -18,6 +18,7 @@ import {
   Select,
   Divider,
   Typography,
+  Space,
 } from "antd";
 import { db } from "../../../firebase/firebase.config";
 import { TableS, EditableColumn } from "../container/TableS";
@@ -73,6 +74,7 @@ const colors = Object.keys(colorMap);
 export default function Remeras() {
   const [items, setItems] = useState<DataType[]>([]);
   const [loading, setLoading] = useState(false);
+  const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
 
   useEffect(() => {
     const unsubscribe = onSnapshot(coll, (snapshot) => {
@@ -174,6 +176,15 @@ export default function Remeras() {
     },
   ];
 
+  // grupos únicos dinámicos
+  const groups = useMemo(() => {
+    const set = new Set<string>();
+    items.forEach((item) =>
+      set.add(`${item.tipo} - ${item.color} - ${item.cuello}`)
+    );
+    return Array.from(set).sort();
+  }, [items]);
+
   return (
     <div style={{ maxWidth: 900, margin: "50px auto", padding: "0 16px" }}>
       <Link href="/">
@@ -269,39 +280,48 @@ export default function Remeras() {
         </Form.Item>
       </Form>
 
-      {/* 👉 Secciones con estilo del HomePage */}
-      {tipos.map((tipo) =>
-        colors.map((color) =>
-          cuellos.map((cuello) => {
-            const group = items.filter(
-              (i) =>
-                i.tipo.toLowerCase() === tipo.toLowerCase() &&
-                i.color.toLowerCase() === color.toLowerCase() &&
-                i.cuello.toLowerCase() === cuello.toLowerCase()
-            );
+      {/* 🔹 Botones dinámicos */}
+      <div style={{ marginBottom: 24 }}>
+        <Space wrap>
+          {groups.map((group) => (
+            <Button
+              key={group}
+              type={selectedGroup === group ? "primary" : "default"}
+              onClick={() => setSelectedGroup(group)}
+            >
+              {group}
+            </Button>
+          ))}
+          {selectedGroup && (
+            <Button onClick={() => setSelectedGroup(null)}>Mostrar Todo</Button>
+          )}
+        </Space>
+      </div>
 
-            if (group.length === 0) return null;
+      {/* 🔹 Tablas filtradas */}
+      {(selectedGroup ? [selectedGroup] : groups).map((group) => {
+        const [tipo, color, cuello] = group.split(" - ");
+        const groupItems = items.filter(
+          (i) =>
+            i.tipo === tipo && i.color === color && i.cuello === cuello
+        );
 
-            return (
-              <div key={`${tipo}-${color}-${cuello}`} style={{ marginBottom: 24 }}>
-                <Divider orientation="left" style={{ color: "#888" }}>
-                  <Typography.Text strong>
-                    {tipo} - {color} - {cuello}
-                  </Typography.Text>
-                </Divider>
-                <TableS
-                  initialData={group}
-                  restColumns={columns}
-                  postColumns={postColumns}
-                  onChange={(newData) =>
-                    newData.forEach((row) => handleEdit(row))
-                  }
-                />
-              </div>
-            );
-          })
-        )
-      )}
+        if (groupItems.length === 0) return null;
+
+        return (
+          <div key={group} style={{ marginBottom: 24 }}>
+            <Divider orientation="left" style={{ color: "#888" }}>
+              <Typography.Text strong>{group}</Typography.Text>
+            </Divider>
+            <TableS
+              initialData={groupItems}
+              restColumns={columns}
+              postColumns={postColumns}
+              onChange={(newData) => newData.forEach((row) => handleEdit(row))}
+            />
+          </div>
+        );
+      })}
     </div>
   );
 }

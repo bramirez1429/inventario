@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { collection, onSnapshot, doc, updateDoc } from "firebase/firestore";
 import { db } from "../../firebase/firebase.config";
 import {
@@ -27,32 +27,16 @@ interface DataType {
   tipo: "Niño" | "Niña" | "Mujer";
 }
 
-const colors = [
-  "negro",
-  "blanco",
-  "gris",
-  "marron chocolate",
-  "rosado",
-  "violeta",
-  "rayado",
-  "crema rayado",
-];
-
-const tipos: DataType["tipo"][] = ["Mujer", "Niña", "Niño"];
-const cuellos: DataType["cuello"][] = ["V", "Redondo"];
-
 const coll = collection(db, "v");
 
 // 👕 mapa de orden de talles
 const orderMap: Record<string, number> = {
-  // adultos
   S: 1,
   M: 2,
   L: 3,
   XL: 4,
   "2XL": 5,
   "3XL": 6,
-  // niños
   "6": 7,
   "8": 8,
   "10": 9,
@@ -64,6 +48,7 @@ const orderMap: Record<string, number> = {
 export default function HomePage() {
   const [items, setItems] = useState<DataType[]>([]);
   const [loadingBtn, setLoadingBtn] = useState<string | null>(null);
+  const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
 
   useEffect(() => {
     const unsubscribe = onSnapshot(coll, (snapshot) => {
@@ -132,6 +117,15 @@ export default function HomePage() {
     return null;
   };
 
+  // 👉 calcular grupos únicos dinámicamente
+  const groups = useMemo(() => {
+    const set = new Set<string>();
+    items.forEach((item) =>
+      set.add(`${item.tipo} - ${item.color} - ${item.cuello}`)
+    );
+    return Array.from(set).sort();
+  }, [items]);
+
   return (
     <Layout style={{ minHeight: "100vh" }}>
       <Content style={{ maxWidth: 900, margin: "30px auto", width: "100%" }}>
@@ -148,80 +142,89 @@ export default function HomePage() {
           Inventario por Categorías
         </Typography.Title>
 
-        {tipos.map((tipo) =>
-          colors.map((color) =>
-            cuellos.map((cuello) => {
-              const group = items.filter(
-                (item) =>
-                  (item.tipo ?? "").toLowerCase() === tipo.toLowerCase() &&
-                  (item.color ?? "").toLowerCase() === color.toLowerCase() &&
-                  (item.cuello ?? "").toLowerCase() === cuello.toLowerCase()
-              );
+        {/* 🔹 Botones dinámicos */}
+        <div style={{ textAlign: "center", marginBottom: 24 }}>
+          {groups.map((group) => (
+            <Button
+              key={group}
+              type={selectedGroup === group ? "primary" : "default"}
+              onClick={() => setSelectedGroup(group)}
+              style={{ margin: "0 8px 8px 0" }}
+            >
+              {group}
+            </Button>
+          ))}
+          {selectedGroup && (
+            <Button onClick={() => setSelectedGroup(null)} style={{ marginLeft: 12 }}>
+              Mostrar Todo
+            </Button>
+          )}
+        </div>
 
-              if (group.length === 0) return null;
+        {/* 🔹 Listas */}
+        {(selectedGroup ? [selectedGroup] : groups).map((group) => {
+          const [tipo, color, cuello] = group.split(" - ");
+          const groupItems = items
+            .filter(
+              (i) =>
+                i.tipo === tipo && i.color === color && i.cuello === cuello
+            )
+            .sort(
+              (a, b) =>
+                (orderMap[a.talle] ?? 999) - (orderMap[b.talle] ?? 999)
+            );
 
-              // 👉 ordena los talles antes de renderizar
-              const sortedGroup = [...group].sort(
-                (a, b) =>
-                  (orderMap[a.talle] ?? 999) - (orderMap[b.talle] ?? 999)
-              );
+          if (groupItems.length === 0) return null;
 
-              return (
-                <div
-                  key={`${tipo}-${color}-${cuello}`}
-                  style={{ marginBottom: 24, padding: "0px 16px" }}
-                >
-                  <Divider orientation="left">
-                    {tipo} - {color} - {cuello}
-                  </Divider>
-                  <List
-                    bordered
-                    dataSource={sortedGroup}
-                    renderItem={(item) => (
-                      <List.Item
-                        style={{
-                          backgroundColor: getBackground(item.cantidad),
-                          borderRadius: 6,
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                        }}
-                        actions={[
-                          <Button
-                            key="decrement"
-                            size="middle"
-                            style={{ minWidth: 40 }}
-                            icon={<MinusOutlined />}
-                            onClick={() => updateCantidad(item, -1, "minus")}
-                            loading={loadingBtn === `${item.key}-minus`}
-                            disabled={item.cantidad <= 0}
-                          />,
-                          <Button
-                            key="increment"
-                            type="primary"
-                            size="middle"
-                            style={{ minWidth: 40 }}
-                            icon={<PlusOutlined />}
-                            onClick={() => updateCantidad(item, +1, "plus")}
-                            loading={loadingBtn === `${item.key}-plus`}
-                          />,
-                        ]}
-                      >
-                        <Space>
-                          <strong>Talle:</strong> {item.talle}
-                          <span>
-                            <strong>Cantidad:</strong> {item.cantidad}
-                          </span>
-                          {getTag(item.cantidad)}
-                        </Space>
-                      </List.Item>
-                    )}
-                  />
-                </div>
-              );
-            })
-          )
-        )}
+          return (
+            <div key={group} style={{ marginBottom: 24, padding: "0px 16px" }}>
+              <Divider orientation="left">{group}</Divider>
+              <List
+                bordered
+                dataSource={groupItems}
+                renderItem={(item) => (
+                  <List.Item
+                    style={{
+                      backgroundColor: getBackground(item.cantidad),
+                      borderRadius: 6,
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                    }}
+                    actions={[
+                      <Button
+                        key="decrement"
+                        size="middle"
+                        style={{ minWidth: 40 }}
+                        icon={<MinusOutlined />}
+                        onClick={() => updateCantidad(item, -1, "minus")}
+                        loading={loadingBtn === `${item.key}-minus`}
+                        disabled={item.cantidad <= 0}
+                      />,
+                      <Button
+                        key="increment"
+                        type="primary"
+                        size="middle"
+                        style={{ minWidth: 40 }}
+                        icon={<PlusOutlined />}
+                        onClick={() => updateCantidad(item, +1, "plus")}
+                        loading={loadingBtn === `${item.key}-plus`}
+                      />,
+                    ]}
+                  >
+                    <Space>
+                      <strong>Talle:</strong> {item.talle}
+                      <span>
+                        <strong>Cantidad:</strong> {item.cantidad}
+                      </span>
+                      {getTag(item.cantidad)}
+                    </Space>
+                  </List.Item>
+                )}
+              />
+            </div>
+          );
+        })}
       </Content>
 
       {/* 🔹 Footer */}
