@@ -14,12 +14,12 @@ import {
   Tag,
   Space,
   message,
+  Checkbox,
 } from "antd";
 import { ShoppingOutlined, SkinOutlined } from "@ant-design/icons";
 
 const { Title, Text } = Typography;
 
-// 📘 Tipado exacto de los documentos
 interface DataType {
   key: string;
   talle: string;
@@ -31,35 +31,34 @@ interface DataType {
 const coll = collection(db, "v");
 
 export default function Packs() {
-  // 💾 Estados principales
+  // 🔹 Estados
   const [items, setItems] = useState<DataType[]>([]);
-
-  // 🧩 Estados del formulario (inicialmente vacíos)
   const [tipo, setTipo] = useState<"" | "Niño" | "Niña">("");
   const [color, setColor] = useState<string>("");
   const [talle, setTalle] = useState<string>("");
   const [packs, setPacks] = useState<number | null>(null);
+  const [usarTodasTalles, setUsarTodasTalles] = useState(false);
 
-  // 📊 Resultado de cálculo
-  const [resultado, setResultado] = useState<{
-    stockBlanco: number;
-    stockColor: number;
-    necesBlanco: number;
-    necesColor: number;
-    faltanBlanco: number;
-    faltanColor: number;
-  } | null>(null);
+  // 📊 Resultado general (puede ser 1 o varios)
+  const [resultados, setResultados] = useState<
+    {
+      talle: string;
+      stockBlanco: number;
+      stockColor: number;
+      necesBlanco: number;
+      necesColor: number;
+      faltanBlanco: number;
+      faltanColor: number;
+    }[]
+  >([]);
 
-  // 📏 Talles disponibles
   const talles = ["6", "8", "10", "12", "14", "16"];
 
-  // 🎨 Colores válidos (lila → violeta)
   const opcionesColores: Record<"Niño" | "Niña", string[]> = {
     Niña: ["rosado", "violeta"],
     Niño: ["negro"],
   };
 
-  // 🎨 Mapa de colores pastel
   const colorPastelMap: Record<string, string> = {
     blanco: "#ffffff",
     rosado: "#ffe4ec",
@@ -67,7 +66,7 @@ export default function Packs() {
     negro: "#d9d9d9",
   };
 
-  // 🔹 Escucha Firestore en tiempo real
+  // 🔹 Firestore realtime
   useEffect(() => {
     const unsub = onSnapshot(coll, (snapshot) => {
       const data = snapshot.docs.map((d) => ({
@@ -85,64 +84,70 @@ export default function Packs() {
     return () => unsub();
   }, []);
 
-  // 🧮 Calcular packs
+  // 🧮 Cálculo para uno o varios talles
   const calcularPacks = () => {
-    // Evitar cálculos con campos vacíos
-    if (!tipo || !color || !talle || !packs) {
-      message.warning("Por favor completa todos los campos antes de calcular.");
+    if (!tipo || !color || !packs) {
+      message.warning("Completá tipo, color y cantidad de packs.");
       return;
     }
 
-    // ✅ Solo blancos tipo Kids
-    const stockBlanco =
-      items.find(
-        (i) =>
-          i.color.toLowerCase() === "blanco" &&
-          i.talle === talle &&
-          i.tipo.toLowerCase() === "kids"
-      )?.cantidad ?? 0;
+    const tallesCalcular = usarTodasTalles ? talles : [talle];
 
-    // ✅ Color correspondiente (violeta si era lila)
-    const stockColor =
-      items.find(
-        (i) =>
-          i.color.toLowerCase() === color.toLowerCase() &&
-          i.talle === talle &&
-          i.tipo === tipo
-      )?.cantidad ?? 0;
+    if (!usarTodasTalles && !talle) {
+      message.warning("Seleccioná un talle o activá 'todas las talles'.");
+      return;
+    }
 
-    const necesBlanco = packs * 2;
-    const necesColor = packs * 2;
+    const nuevosResultados = tallesCalcular.map((t) => {
+      const stockBlanco =
+        items.find(
+          (i) =>
+            i.color.toLowerCase() === "blanco" &&
+            i.talle === t &&
+            i.tipo.toLowerCase() === "kids"
+        )?.cantidad ?? 0;
 
-    const faltanBlanco = Math.max(0, necesBlanco - stockBlanco);
-    const faltanColor = Math.max(0, necesColor - stockColor);
+      const stockColor =
+        items.find(
+          (i) =>
+            i.color.toLowerCase() === color.toLowerCase() &&
+            i.talle === t &&
+            i.tipo === tipo
+        )?.cantidad ?? 0;
 
-    setResultado({
-      stockBlanco,
-      stockColor,
-      necesBlanco,
-      necesColor,
-      faltanBlanco,
-      faltanColor,
+      const necesBlanco = packs * 2;
+      const necesColor = packs * 2;
+      const faltanBlanco = Math.max(0, necesBlanco - stockBlanco);
+      const faltanColor = Math.max(0, necesColor - stockColor);
+
+      return {
+        talle: t,
+        stockBlanco,
+        stockColor,
+        necesBlanco,
+        necesColor,
+        faltanBlanco,
+        faltanColor,
+      };
     });
 
-    message.success("Cálculo realizado correctamente ✅");
+    setResultados(nuevosResultados);
+    message.success("Cálculo realizado ✅");
 
-    // 🔄 Reiniciar formulario después de calcular
-/*     setTipo("");
+    // 🔄 Limpiar el formulario (excepto checkbox)
+    setTipo("");
     setColor("");
     setTalle("");
-    setPacks(null); */
+    setPacks(null);
   };
 
-  // 🎨 Etiqueta de color de stock
+  // 🔖 Colores para tags
   const getColorTag = (faltan: number) => {
     if (faltan === 0) return "green";
     if (faltan <= 4) return "orange";
     return "red";
   };
 
-  // 🎨 Cuadro visual con color
   const renderColorBox = (color: string, label: string) => (
     <div
       style={{
@@ -174,7 +179,6 @@ export default function Packs() {
 
   return (
     <div style={{ maxWidth: 900, margin: "50px auto", padding: "0 16px" }}>
-      {/* 🔹 Título principal */}
       <div style={{ textAlign: "center", marginBottom: 24 }}>
         <Title
           level={2}
@@ -192,7 +196,7 @@ export default function Packs() {
         </Title>
       </div>
 
-      {/* 🔸 Formulario */}
+      {/* 🧩 FORMULARIO */}
       <Card
         style={{
           marginBottom: 32,
@@ -203,7 +207,7 @@ export default function Packs() {
         <Space wrap style={{ width: "100%", justifyContent: "center" }}>
           {/* Tipo */}
           <Select
-            placeholder="Seleccionar tipo"
+            placeholder="Tipo"
             value={tipo || undefined}
             onChange={(v) => {
               setTipo(v);
@@ -218,7 +222,7 @@ export default function Packs() {
 
           {/* Color */}
           <Select
-            placeholder="Seleccionar color"
+            placeholder="Color"
             value={color || undefined}
             onChange={setColor}
             style={{ width: 180 }}
@@ -233,9 +237,17 @@ export default function Packs() {
             disabled={!tipo}
           />
 
+          {/* Checkbox: usar todas las talles */}
+          <Checkbox
+            checked={usarTodasTalles}
+            onChange={(e) => setUsarTodasTalles(e.target.checked)}
+          >
+            Usar todas las talles
+          </Checkbox>
+
           {/* Talle */}
           <Select
-            placeholder="Seleccionar talle"
+            placeholder="Talle"
             value={talle || undefined}
             onChange={setTalle}
             style={{ width: 140 }}
@@ -243,6 +255,7 @@ export default function Packs() {
               value: t,
               label: `Talle ${t}`,
             }))}
+            disabled={usarTodasTalles}
           />
 
           {/* Packs */}
@@ -255,79 +268,82 @@ export default function Packs() {
             addonAfter="packs"
           />
 
-          {/* Botón de cálculo */}
           <Button type="primary" size="large" onClick={calcularPacks}>
             Calcular
           </Button>
         </Space>
       </Card>
 
-      {/* 🧾 Resultado */}
-      {resultado && (
-        <Card
-          style={{
-            backgroundColor:
-              resultado.faltanBlanco === 0 && resultado.faltanColor === 0
-                ? "#e6fffb"
-                : resultado.faltanBlanco <= 4 && resultado.faltanColor <= 4
-                ? "#fffbe6"
-                : "#fff1f0",
-            borderRadius: 12,
-            padding: 24,
-            boxShadow: "0 3px 8px rgba(0,0,0,0.1)",
-          }}
-          title={
-            <Title level={4} style={{ margin: 0, color: "#444" }}>
-              {tipo} · Talle {talle} · Pack {color} + blanco
-            </Title>
-          }
-        >
-          <Row gutter={[24, 24]}>
-            {/* Blanco (Kids) */}
-            <Col span={12}>
-              <Space align="center" size="middle">
-                {renderColorBox("blanco", "Color Blanco")}
-                <Text strong style={{ fontSize: 16 }}>
-                  Remeras Blancas (Kids)
-                </Text>
-              </Space>
-              <div style={{ marginTop: 12, lineHeight: "1.8em" }}>
-                <Text>Stock: {resultado.stockBlanco}</Text> <br />
-                <Text>Necesitás: {resultado.necesBlanco}</Text> <br />
-                <Tag
-                  color={getColorTag(resultado.faltanBlanco)}
-                  style={{ fontSize: 14, padding: "4px 10px" }}
-                >
-                  {resultado.faltanBlanco > 0
-                    ? `Faltan ${resultado.faltanBlanco}`
-                    : "Stock OK"}
-                </Tag>
-              </div>
-            </Col>
+      {/* 🧾 RESULTADOS */}
+      {resultados.length > 0 && (
+        <div>
+          {resultados.map((res) => (
+            <Card
+              key={res.talle}
+              style={{
+                marginBottom: 24,
+                backgroundColor:
+                  res.faltanBlanco === 0 && res.faltanColor === 0
+                    ? "#e6fffb"
+                    : res.faltanBlanco <= 4 && res.faltanColor <= 4
+                    ? "#fffbe6"
+                    : "#fff1f0",
+                borderRadius: 12,
+                padding: 24,
+                boxShadow: "0 3px 8px rgba(0,0,0,0.1)",
+              }}
+              title={
+                <Title level={4} style={{ margin: 0, color: "#444" }}>
+                  {tipo} · Talle {res.talle} · Pack {color} + blanco
+                </Title>
+              }
+            >
+              <Row gutter={[24, 24]}>
+                <Col span={12}>
+                  <Space align="center" size="middle">
+                    {renderColorBox("blanco", "Color Blanco")}
+                    <Text strong style={{ fontSize: 16 }}>
+                      Remeras Blancas (Kids)
+                    </Text>
+                  </Space>
+                  <div style={{ marginTop: 12, lineHeight: "1.8em" }}>
+                    <Text>Stock: {res.stockBlanco}</Text> <br />
+                    <Text>Necesitás: {res.necesBlanco}</Text> <br />
+                    <Tag
+                      color={getColorTag(res.faltanBlanco)}
+                      style={{ fontSize: 14, padding: "4px 10px" }}
+                    >
+                      {res.faltanBlanco > 0
+                        ? `Faltan ${res.faltanBlanco}`
+                        : "Stock OK"}
+                    </Tag>
+                  </div>
+                </Col>
 
-            {/* Color elegido */}
-            <Col span={12}>
-              <Space align="center" size="middle">
-                {renderColorBox(color, `Color ${color}`)}
-                <Text strong style={{ fontSize: 16 }}>
-                  Remeras {color.charAt(0).toUpperCase() + color.slice(1)}
-                </Text>
-              </Space>
-              <div style={{ marginTop: 12, lineHeight: "1.8em" }}>
-                <Text>Stock: {resultado.stockColor}</Text> <br />
-                <Text>Necesitás: {resultado.necesColor}</Text> <br />
-                <Tag
-                  color={getColorTag(resultado.faltanColor)}
-                  style={{ fontSize: 14, padding: "4px 10px" }}
-                >
-                  {resultado.faltanColor > 0
-                    ? `Faltan ${resultado.faltanColor}`
-                    : "Stock OK"}
-                </Tag>
-              </div>
-            </Col>
-          </Row>
-        </Card>
+                <Col span={12}>
+                  <Space align="center" size="middle">
+                    {renderColorBox(color, `Color ${color}`)}
+                    <Text strong style={{ fontSize: 16 }}>
+                      Remeras {color.charAt(0).toUpperCase() + color.slice(1)}
+                    </Text>
+                  </Space>
+                  <div style={{ marginTop: 12, lineHeight: "1.8em" }}>
+                    <Text>Stock: {res.stockColor}</Text> <br />
+                    <Text>Necesitás: {res.necesColor}</Text> <br />
+                    <Tag
+                      color={getColorTag(res.faltanColor)}
+                      style={{ fontSize: 14, padding: "4px 10px" }}
+                    >
+                      {res.faltanColor > 0
+                        ? `Faltan ${res.faltanColor}`
+                        : "Stock OK"}
+                    </Tag>
+                  </div>
+                </Col>
+              </Row>
+            </Card>
+          ))}
+        </div>
       )}
     </div>
   );
