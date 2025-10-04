@@ -31,14 +31,16 @@ interface DataType {
 const coll = collection(db, "v");
 
 export default function Packs() {
-  // 💾 Estados
+  // 💾 Estados principales
   const [items, setItems] = useState<DataType[]>([]);
-  const [tipo, setTipo] = useState<"Niño" | "Niña">("Niño");
-  const [color, setColor] = useState<string>("rosado");
-  const [talle, setTalle] = useState<string>("6");
-  const [packs, setPacks] = useState<number>(1);
 
-  // 📊 Resultado
+  // 🧩 Estados del formulario (inicialmente vacíos)
+  const [tipo, setTipo] = useState<"" | "Niño" | "Niña">("");
+  const [color, setColor] = useState<string>("");
+  const [talle, setTalle] = useState<string>("");
+  const [packs, setPacks] = useState<number | null>(null);
+
+  // 📊 Resultado de cálculo
   const [resultado, setResultado] = useState<{
     stockBlanco: number;
     stockColor: number;
@@ -48,12 +50,12 @@ export default function Packs() {
     faltanColor: number;
   } | null>(null);
 
-  // 📏 Talles
+  // 📏 Talles disponibles
   const talles = ["6", "8", "10", "12", "14", "16"];
 
   // 🎨 Colores válidos (lila → violeta)
   const opcionesColores: Record<"Niño" | "Niña", string[]> = {
-    Niña: ["rosado", "violeta"], // 🔹 antes “lila”
+    Niña: ["rosado", "violeta"],
     Niño: ["negro"],
   };
 
@@ -65,15 +67,16 @@ export default function Packs() {
     negro: "#d9d9d9",
   };
 
-  // 🔹 Escucha Firestore
+  // 🔹 Escucha Firestore en tiempo real
   useEffect(() => {
     const unsub = onSnapshot(coll, (snapshot) => {
       const data = snapshot.docs.map((d) => ({
         key: d.id,
         talle: d.data().talle ?? "",
-        color: (d.data().color ?? "").toLowerCase() === "lila"
-          ? "violeta" // 🔹 conversión automática
-          : d.data().color ?? "",
+        color:
+          (d.data().color ?? "").toLowerCase() === "lila"
+            ? "violeta"
+            : d.data().color ?? "",
         cantidad: Number(d.data().cantidad ?? 0),
         tipo: d.data().tipo ?? "Niño",
       })) as DataType[];
@@ -84,7 +87,13 @@ export default function Packs() {
 
   // 🧮 Calcular packs
   const calcularPacks = () => {
-    // ✅ Solo blancos de tipo Kids
+    // Evitar cálculos con campos vacíos
+    if (!tipo || !color || !talle || !packs) {
+      message.warning("Por favor completa todos los campos antes de calcular.");
+      return;
+    }
+
+    // ✅ Solo blancos tipo Kids
     const stockBlanco =
       items.find(
         (i) =>
@@ -117,17 +126,23 @@ export default function Packs() {
       faltanColor,
     });
 
-    message.success("Cálculo realizado");
+    message.success("Cálculo realizado correctamente ✅");
+
+    // 🔄 Reiniciar formulario después de calcular
+/*     setTipo("");
+    setColor("");
+    setTalle("");
+    setPacks(null); */
   };
 
-  // 🔖 Colores del tag
+  // 🎨 Etiqueta de color de stock
   const getColorTag = (faltan: number) => {
     if (faltan === 0) return "green";
     if (faltan <= 4) return "orange";
     return "red";
   };
 
-  // 🎨 Cuadro visual
+  // 🎨 Cuadro visual con color
   const renderColorBox = (color: string, label: string) => (
     <div
       style={{
@@ -159,7 +174,7 @@ export default function Packs() {
 
   return (
     <div style={{ maxWidth: 900, margin: "50px auto", padding: "0 16px" }}>
-      {/* 🔹 Encabezado */}
+      {/* 🔹 Título principal */}
       <div style={{ textAlign: "center", marginBottom: 24 }}>
         <Title
           level={2}
@@ -177,7 +192,7 @@ export default function Packs() {
         </Title>
       </div>
 
-      {/* 🔸 Controles */}
+      {/* 🔸 Formulario */}
       <Card
         style={{
           marginBottom: 32,
@@ -188,10 +203,11 @@ export default function Packs() {
         <Space wrap style={{ width: "100%", justifyContent: "center" }}>
           {/* Tipo */}
           <Select
-            value={tipo}
+            placeholder="Seleccionar tipo"
+            value={tipo || undefined}
             onChange={(v) => {
               setTipo(v);
-              setColor(opcionesColores[v][0]);
+              setColor("");
             }}
             style={{ width: 150 }}
             options={[
@@ -202,18 +218,25 @@ export default function Packs() {
 
           {/* Color */}
           <Select
-            value={color}
+            placeholder="Seleccionar color"
+            value={color || undefined}
             onChange={setColor}
             style={{ width: 180 }}
-            options={opcionesColores[tipo].map((c) => ({
-              value: c,
-              label: `${c} - blanco`,
-            }))}
+            options={
+              tipo
+                ? opcionesColores[tipo].map((c) => ({
+                    value: c,
+                    label: `${c} - blanco`,
+                  }))
+                : []
+            }
+            disabled={!tipo}
           />
 
           {/* Talle */}
           <Select
-            value={talle}
+            placeholder="Seleccionar talle"
+            value={talle || undefined}
             onChange={setTalle}
             style={{ width: 140 }}
             options={talles.map((t) => ({
@@ -225,12 +248,14 @@ export default function Packs() {
           {/* Packs */}
           <InputNumber
             min={1}
-            value={packs}
+            placeholder="Cantidad"
+            value={packs ?? undefined}
             onChange={(v) => setPacks(v || 1)}
             style={{ width: 140 }}
             addonAfter="packs"
           />
 
+          {/* Botón de cálculo */}
           <Button type="primary" size="large" onClick={calcularPacks}>
             Calcular
           </Button>
