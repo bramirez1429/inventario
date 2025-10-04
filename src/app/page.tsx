@@ -12,12 +12,15 @@ import {
   message,
   Tag,
   Layout,
+  Row,
+  Col,
 } from "antd";
 import { PlusOutlined, MinusOutlined } from "@ant-design/icons";
 import Link from "next/link";
 
 const { Footer, Content } = Layout;
 
+// 📘 Tipado de cada documento en Firestore
 interface DataType {
   key: string;
   talle: string;
@@ -29,7 +32,7 @@ interface DataType {
 
 const coll = collection(db, "v");
 
-// 👕 mapa de orden de talles
+// 📏 Orden de talles para que se vean en orden lógico
 const orderMap: Record<string, number> = {
   S: 1,
   M: 2,
@@ -46,10 +49,12 @@ const orderMap: Record<string, number> = {
 };
 
 export default function HomePage() {
+  // 🔹 Estados principales
   const [items, setItems] = useState<DataType[]>([]);
   const [loadingBtn, setLoadingBtn] = useState<string | null>(null);
-  const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
+  const [selectedPacks, setSelectedPacks] = useState<string[]>([]); // grupos elegidos
 
+  // 🔹 Escucha en tiempo real los productos de Firestore
   useEffect(() => {
     const unsubscribe = onSnapshot(coll, (snapshot) => {
       setItems(
@@ -66,6 +71,7 @@ export default function HomePage() {
     return () => unsubscribe();
   }, []);
 
+  // 🔹 Actualizar cantidad (suma/resta)
   const updateCantidad = async (
     record: DataType,
     delta: number,
@@ -76,10 +82,15 @@ export default function HomePage() {
       const newCantidad = Math.max(0, record.cantidad + delta);
       await updateDoc(doc(db, "v", record.key), { cantidad: newCantidad });
 
+      // 🔔 Alertas de stock
       if (newCantidad === 0) {
-        message.warning(`El producto talle ${record.talle} quedó en 0. ¡Comprar urgente!`);
+        message.warning(
+          `El producto talle ${record.talle} quedó en 0. ¡Comprar urgente!`
+        );
       } else if (newCantidad <= 2) {
-        message.warning(`El producto talle ${record.talle} tiene muy poco stock`);
+        message.warning(
+          `El producto talle ${record.talle} tiene muy poco stock`
+        );
       } else {
         message.success("Cantidad actualizada");
       }
@@ -91,14 +102,14 @@ export default function HomePage() {
     }
   };
 
-  // 🎨 fondo pastel según cantidad
+  // 🎨 Colores de fondo según stock
   const getBackground = (cantidad: number) => {
     if (cantidad === 0 || cantidad < 3) return "#ffecec"; // rojo pastel
     if (cantidad >= 3 && cantidad <= 5) return "#fffbe6"; // amarillo pastel
     return "#b9fbc0"; // verde pastel
   };
 
-  // 🔖 etiqueta según cantidad
+  // 🔖 Mensajes según stock
   const getTag = (cantidad: number) => {
     if (cantidad === 0) {
       return (
@@ -117,7 +128,7 @@ export default function HomePage() {
     return null;
   };
 
-  // 👉 calcular grupos únicos dinámicamente
+  // 👉 Grupos dinámicos (ejemplo: "Niño - blanco - Redondo")
   const groups = useMemo(() => {
     const set = new Set<string>();
     items.forEach((item) =>
@@ -126,9 +137,31 @@ export default function HomePage() {
     return Array.from(set).sort();
   }, [items]);
 
+  // 👉 Grupos a mostrar: si no hay packs seleccionados → se muestran todos
+  const groupsToShow = selectedPacks.length > 0 ? selectedPacks : groups;
+
   return (
     <Layout style={{ minHeight: "100vh" }}>
-      <Content style={{ maxWidth: 900, margin: "30px auto", width: "100%" }}>
+      <Content style={{ maxWidth: 1100, margin: "30px auto", width: "100%" }}>
+        {/* 🔹 Botón verde para iniciar selección de packs */}
+        <div style={{ textAlign: "center", marginBottom: 24 }}>
+          <Link href="/packs">
+
+          <Button
+            style={{
+              backgroundColor: "#b9fbc0",
+              borderColor: "#95e5a5",
+              color: "#333",
+            }}
+            size="large"
+            onClick={() => setSelectedPacks([])} // reset selección
+          >
+            Armar Packs
+          </Button>
+          </Link>
+
+        </div>
+
         {/* 🔹 Botón de navegación */}
         <div style={{ textAlign: "center", marginBottom: 24 }}>
           <Link href="/remeras">
@@ -142,89 +175,94 @@ export default function HomePage() {
           Inventario por Categorías
         </Typography.Title>
 
-        {/* 🔹 Botones dinámicos */}
+        {/* 🔹 Botones de grupos para seleccionar hasta 4 */}
         <div style={{ textAlign: "center", marginBottom: 24 }}>
           {groups.map((group) => (
             <Button
               key={group}
-              type={selectedGroup === group ? "primary" : "default"}
-              onClick={() => setSelectedGroup(group)}
+              type={selectedPacks.includes(group) ? "primary" : "default"}
+              disabled={
+                !selectedPacks.includes(group) && selectedPacks.length >= 4
+              }
+              onClick={() => {
+                setSelectedPacks((prev) =>
+                  prev.includes(group)
+                    ? prev.filter((g) => g !== group)
+                    : [...prev, group]
+                );
+              }}
               style={{ margin: "0 8px 8px 0" }}
             >
               {group}
             </Button>
           ))}
-          {selectedGroup && (
-            <Button onClick={() => setSelectedGroup(null)} style={{ marginLeft: 12 }}>
-              Mostrar Todo
-            </Button>
-          )}
         </div>
 
-        {/* 🔹 Listas */}
-        {(selectedGroup ? [selectedGroup] : groups).map((group) => {
-          const [tipo, color, cuello] = group.split(" - ");
-          const groupItems = items
-            .filter(
-              (i) =>
-                i.tipo === tipo && i.color === color && i.cuello === cuello
-            )
-            .sort(
-              (a, b) =>
-                (orderMap[a.talle] ?? 999) - (orderMap[b.talle] ?? 999)
+        {/* 🔹 Renderizado de tablas: en móvil (xs=24) → 1 por fila, en desktop (md=12) → 2 por fila */}
+        <Row gutter={[16, 16]}>
+          {groupsToShow.map((group) => {
+            const [tipo, color, cuello] = group.split(" - ");
+            const groupItems = items
+              .filter(
+                (i) => i.tipo === tipo && i.color === color && i.cuello === cuello
+              )
+              .sort(
+                (a, b) =>
+                  (orderMap[a.talle] ?? 999) - (orderMap[b.talle] ?? 999)
+              );
+
+            if (groupItems.length === 0) return null;
+
+            return (
+              <Col key={group} xs={24} md={12}>
+                <Divider orientation="center">{group}</Divider>
+                <List
+                  bordered
+                  dataSource={groupItems}
+                  renderItem={(item) => (
+                    <List.Item
+                      style={{
+                        backgroundColor: getBackground(item.cantidad),
+                        borderRadius: 6,
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                      }}
+                      actions={[
+                        <Button
+                          key="decrement"
+                          size="middle"
+                          style={{ minWidth: 40 }}
+                          icon={<MinusOutlined />}
+                          onClick={() => updateCantidad(item, -1, "minus")}
+                          loading={loadingBtn === `${item.key}-minus`}
+                          disabled={item.cantidad <= 0}
+                        />,
+                        <Button
+                          key="increment"
+                          type="primary"
+                          size="middle"
+                          style={{ minWidth: 40 }}
+                          icon={<PlusOutlined />}
+                          onClick={() => updateCantidad(item, +1, "plus")}
+                          loading={loadingBtn === `${item.key}-plus`}
+                        />,
+                      ]}
+                    >
+                      <Space>
+                        <strong>Talle:</strong> {item.talle}
+                        <span>
+                          <strong>Cantidad:</strong> {item.cantidad}
+                        </span>
+                        {getTag(item.cantidad)}
+                      </Space>
+                    </List.Item>
+                  )}
+                />
+              </Col>
             );
-
-          if (groupItems.length === 0) return null;
-
-          return (
-            <div key={group} style={{ marginBottom: 24, padding: "0px 16px" }}>
-              <Divider orientation="left">{group}</Divider>
-              <List
-                bordered
-                dataSource={groupItems}
-                renderItem={(item) => (
-                  <List.Item
-                    style={{
-                      backgroundColor: getBackground(item.cantidad),
-                      borderRadius: 6,
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                    }}
-                    actions={[
-                      <Button
-                        key="decrement"
-                        size="middle"
-                        style={{ minWidth: 40 }}
-                        icon={<MinusOutlined />}
-                        onClick={() => updateCantidad(item, -1, "minus")}
-                        loading={loadingBtn === `${item.key}-minus`}
-                        disabled={item.cantidad <= 0}
-                      />,
-                      <Button
-                        key="increment"
-                        type="primary"
-                        size="middle"
-                        style={{ minWidth: 40 }}
-                        icon={<PlusOutlined />}
-                        onClick={() => updateCantidad(item, +1, "plus")}
-                        loading={loadingBtn === `${item.key}-plus`}
-                      />,
-                    ]}
-                  >
-                    <Space>
-                      <strong>Talle:</strong> {item.talle}
-                      <span>
-                        <strong>Cantidad:</strong> {item.cantidad}
-                      </span>
-                      {getTag(item.cantidad)}
-                    </Space>
-                  </List.Item>
-                )}
-              />
-            </div>
-          );
-        })}
+          })}
+        </Row>
       </Content>
 
       {/* 🔹 Footer */}

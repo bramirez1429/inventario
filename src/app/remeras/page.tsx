@@ -33,7 +33,9 @@ interface DataType {
   tipo: "Niño" | "Niña" | "Mujer";
 }
 
-type FieldType = DataType;
+// 🔹 Tipo extendido (permite "Kids" solo en el front)
+type FormTipo = DataType["tipo"] | "Kids";
+type FieldType = Omit<DataType, "tipo"> & { tipo: FormTipo };
 
 const coll = collection(db, "v");
 
@@ -67,7 +69,6 @@ const colorMap: Record<string, string> = {
     "repeating-linear-gradient(45deg, #f5f5dc, #f5f5dc 10px, #fff 10px, #fff 20px)",
 };
 
-const tipos: DataType["tipo"][] = ["Mujer", "Niña", "Niño"];
 const cuellos: DataType["cuello"][] = ["V", "Redondo"];
 const colors = Object.keys(colorMap);
 
@@ -75,6 +76,14 @@ export default function Remeras() {
   const [items, setItems] = useState<DataType[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
+  const [form] = Form.useForm<FieldType>();
+
+  // 🔹 opciones dinámicas para "tipo"
+  const [tipoOptions, setTipoOptions] = useState<FormTipo[]>([
+    "Mujer",
+    "Niño",
+    "Niña",
+  ]);
 
   useEffect(() => {
     const unsubscribe = onSnapshot(coll, (snapshot) => {
@@ -98,7 +107,11 @@ export default function Remeras() {
   const handleAddItem = async (values: FieldType) => {
     setLoading(true);
     try {
-      await addDoc(coll, values);
+      // 🔹 si es Kids lo guardamos como Niño
+      const tipoReal: DataType["tipo"] =
+        values.tipo === "Kids" ? "Niño" : values.tipo;
+
+      await addDoc(coll, { ...values, tipo: tipoReal });
       message.success("Producto agregado");
     } finally {
       setLoading(false);
@@ -128,7 +141,7 @@ export default function Remeras() {
     message.success("Producto eliminado");
   };
 
-  // columnas
+  // columnas de la tabla
   const columns: EditableColumn[] = [
     { title: "Talle", dataIndex: "talle", key: "talle", editable: true },
     {
@@ -180,10 +193,23 @@ export default function Remeras() {
   const groups = useMemo(() => {
     const set = new Set<string>();
     items.forEach((item) =>
-      set.add(`${item.tipo} - ${item.color} - ${item.cuello}`)
+      set.add(
+        `${item.tipo === "Niño" && item.color === "blanco" ? "Kids" : item.tipo
+        } - ${item.color} - ${item.cuello}`
+      )
     );
     return Array.from(set).sort();
   }, [items]);
+
+  // 🔹 evento cuando cambia el color
+  const handleColorChange = (color: string) => {
+    form.setFieldValue("tipo", undefined); // resetea tipo
+    if (color.toLowerCase() === "blanco") {
+      setTipoOptions(["Mujer", "Kids"]); // solo Mujer y Kids
+    } else {
+      setTipoOptions(["Mujer", "Niño", "Niña"]); // todas las demás
+    }
+  };
 
   return (
     <div style={{ maxWidth: 900, margin: "50px auto", padding: "0 16px" }}>
@@ -195,12 +221,13 @@ export default function Remeras() {
 
       {/* Formulario de alta */}
       <Form<FieldType>
+        form={form}
         layout="inline"
         onFinish={handleAddItem}
         autoComplete="off"
         style={{ marginBottom: 24, flexWrap: "wrap", gap: "12px" }}
       >
-        {/* talles */}
+        {/* talle */}
         <Form.Item<FieldType>
           name="talle"
           rules={[{ required: true, message: "Ingrese un talle" }]}
@@ -228,7 +255,11 @@ export default function Remeras() {
           name="color"
           rules={[{ required: true, message: "Ingrese un color" }]}
         >
-          <Select placeholder="Color" style={{ width: 180 }}>
+          <Select
+            placeholder="Color"
+            style={{ width: 180 }}
+            onChange={handleColorChange} // 🔹 aquí el cambio dinámico
+          >
             {colors.map((c) => (
               <Select.Option key={c} value={c}>
                 {c.charAt(0).toUpperCase() + c.slice(1)}
@@ -259,13 +290,13 @@ export default function Remeras() {
           </Select>
         </Form.Item>
 
-        {/* tipo */}
+        {/* tipo dinámico */}
         <Form.Item<FieldType>
           name="tipo"
           rules={[{ required: true, message: "Seleccione tipo" }]}
         >
           <Select placeholder="Tipo" style={{ width: 140 }}>
-            {tipos.map((t) => (
+            {tipoOptions.map((t) => (
               <Select.Option key={t} value={t}>
                 {t}
               </Select.Option>
@@ -303,7 +334,9 @@ export default function Remeras() {
         const [tipo, color, cuello] = group.split(" - ");
         const groupItems = items.filter(
           (i) =>
-            i.tipo === tipo && i.color === color && i.cuello === cuello
+            (i.tipo === tipo || (i.tipo === "Niño" && tipo === "Kids")) &&
+            i.color === color &&
+            i.cuello === cuello
         );
 
         if (groupItems.length === 0) return null;
