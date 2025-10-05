@@ -102,167 +102,125 @@ export default function HomePage() {
 
   /* 7️⃣ Mensajes visuales */
   const getTag = (cantidad: number) => {
-    if (cantidad === 0)
-      return <Tag color="red">¡Sin stock!</Tag>;
-    if (cantidad <= 2)
-      return <Tag color="orange">Poco stock</Tag>;
+    if (cantidad === 0) return <Tag color="red">¡Sin stock!</Tag>;
+    if (cantidad <= 2) return <Tag color="orange">Poco stock</Tag>;
     return null;
   };
 
   /* 8️⃣ Agrupación */
   const groups = useMemo(() => {
     const set = new Set<string>();
-    items.forEach((i) =>
-      set.add(`${i.tipo} - ${i.color} - ${i.cuello}`)
-    );
+    items.forEach((i) => set.add(`${i.tipo} - ${i.color} - ${i.cuello}`));
     return Array.from(set).sort();
   }, [items]);
 
   const groupsToShow = selectedPacks.length > 0 ? selectedPacks : groups;
 
-/* 9️⃣ Descuento automático con prioridad */
-const handleDescontar = async () => {
-  try {
-    const tallesMap: Record<string, string[]> = {};
-
-    // Agrupa por talle: { "6": ["rosado", "violeta"], "8": ["negro"], ... }
-    for (const val of selectedOptions) {
-      const [color, talle] = val.split("-");
-      if (!tallesMap[talle]) tallesMap[talle] = [];
-      tallesMap[talle].push(color);
-    }
-
-    // Iterar por talle
-    for (const talle of Object.keys(tallesMap)) {
-      const colores = tallesMap[talle];
-
-      // 🟢 Buscar blanco actual
-      const blancoItem = items.find(
-        (i) => i.color.toLowerCase() === "blanco" && i.talle === talle
-      );
-      if (!blancoItem) {
-        message.warning(`No hay remeras blancas registradas en talle ${talle}`);
-        continue;
-      }
-
-      let stockBlanco = blancoItem.cantidad;
-
-      // 🧮 Recorre los packs en el orden seleccionado
-      for (const color of colores) {
-        // Verificar stock blanco antes de descontar
-        if (stockBlanco < 2) {
-          message.warning(
-            `No hay más stock blanco para continuar con los packs del talle ${talle}`
-          );
-          break; // detiene descuento en este talle
-        }
-
-        // Busca el color del pack
-        const colorItem = items.find(
-          (i) => i.color.toLowerCase() === color && i.talle === talle
-        );
-        if (!colorItem) continue;
-
-        if (colorItem.cantidad < 2) {
-          message.warning(
-            `No hay suficiente stock de ${color} talle ${talle}, se omite este pack`
-          );
-          continue;
-        }
-
-        // Descuento: 2 del color y 2 blancas
-        const nuevoStockColor = Math.max(0, colorItem.cantidad - 2);
-        stockBlanco = Math.max(0, stockBlanco - 2);
-
-        await updateDoc(doc(db, "v", colorItem.key), {
-          cantidad: nuevoStockColor,
-        });
-        await updateDoc(doc(db, "v", blancoItem.key), {
-          cantidad: stockBlanco,
-        });
-
-        // 🟡 Alertas si queda sin stock
-        if (nuevoStockColor === 0)
-          message.warning(`Ahora no queda más stock ${color} (talle ${talle})`);
-        if (stockBlanco === 0)
-          message.warning(`Ahora no queda más stock blanco (talle ${talle})`);
-
-        message.success(`Descontado pack ${color} (talle ${talle})`);
-      }
-    }
-
-    setSelectedOptions([]);
-  } catch (err) {
-    console.error(err);
-    message.error("Error al descontar stock");
-  }
-};
-
-
-  /* 🔟 TagRender SEGURO (sin undefined.split) */
-  const tagRender: SelectProps["tagRender"] = (props) => {
-    const { label, value, closable, onClose } = props;
-    if (!value || typeof value !== "string") {
-      return (
-        <Tag color="#d9d9d9" closable={closable} onClose={onClose}>
-          {label || "?"}
-        </Tag>
-      );
-    }
-
-    const [colorName] = value.split("-");
-    const colorHex =
-      colorName === "rosado"
-        ? "#ffd6e7"
-        : colorName === "violeta"
-        ? "#d8b4fe"
-        : colorName === "negro"
-        ? "#d9d9d9"
-        : "#eaeaea";
-
-    return (
-      <Tag
-        color={colorHex}
-        closable={closable}
-        onClose={onClose}
-        style={{ marginInlineEnd: 4, color: "#333", fontWeight: 500 }}
-      >
-        {label}
-      </Tag>
-    );
+  /* 🎨 Asignar color de fondo a cada botón según color del grupo */
+  const getButtonColor = (color: string): string => {
+    const c = color.toLowerCase();
+    if (c.includes("blanco")) return "#ffffff";
+    if (c.includes("gris")) return "#d9d9d9";
+    if (c.includes("marron") || c.includes("marrón")) return "#d2b48c";
+    if (c.includes("negro")) return "#000000";
+    if (c.includes("rosado")) return "#ffd6e7";
+    if (c.includes("violeta")) return "#e6ccff";
+    return "#f5f5f5";
   };
 
-  /* 1️⃣1️⃣ Opciones con disable si stock < 2 */
+  /* 9️⃣ Descuento automático con prioridad */
+  const handleDescontar = async () => {
+    try {
+      const tallesMap: Record<string, string[]> = {};
+
+      // Agrupa por talle: { "6": ["rosado", "violeta"], ... }
+      for (const val of selectedOptions) {
+        const [color, talle] = val.split("-");
+        if (!tallesMap[talle]) tallesMap[talle] = [];
+        tallesMap[talle].push(color);
+      }
+
+      for (const talle of Object.keys(tallesMap)) {
+        const colores = tallesMap[talle];
+        const blancoItem = items.find(
+          (i) => i.color.toLowerCase() === "blanco" && i.talle === talle
+        );
+        if (!blancoItem) continue;
+        let stockBlanco = blancoItem.cantidad;
+
+        for (const color of colores) {
+          if (stockBlanco < 2) {
+            message.warning(
+              `No hay más blancas para packs del talle ${talle}`
+            );
+            break;
+          }
+          const colorItem = items.find(
+            (i) => i.color.toLowerCase() === color && i.talle === talle
+          );
+          if (!colorItem) continue;
+          if (colorItem.cantidad < 2) continue;
+
+          const nuevoColor = Math.max(0, colorItem.cantidad - 2);
+          stockBlanco = Math.max(0, stockBlanco - 2);
+
+          await updateDoc(doc(db, "v", colorItem.key), { cantidad: nuevoColor });
+          await updateDoc(doc(db, "v", blancoItem.key), { cantidad: stockBlanco });
+
+          if (nuevoColor === 0)
+            message.warning(`Sin stock ${color} talle ${talle}`);
+          if (stockBlanco === 0)
+            message.warning(`Sin stock blanco talle ${talle}`);
+        }
+      }
+
+      setSelectedOptions([]);
+    } catch (err) {
+      console.error(err);
+      message.error("Error al descontar stock");
+    }
+  };
+
+  /* 🔟 TagRender 100 % tipado sin null */
+const tagRender: NonNullable<SelectProps["tagRender"]> = (props) => {
+  const { label, value, closable, onClose } = props;
+  const safeValue = typeof value === "string" ? value : "";
+  const [colorName] = safeValue.split("-");
+  const colorHex =
+    colorName === "rosado"
+      ? "#ffd6e7"
+      : colorName === "violeta"
+      ? "#e6ccff"
+      : colorName === "negro"
+      ? "#d9d9d9"
+      : "#eaeaea";
+
+  return (
+    <Tag
+      color={colorHex}
+      closable={closable}
+      onClose={onClose}
+      style={{
+        marginInlineEnd: 4,
+        color: "#333",
+        fontWeight: 500,
+      }}
+    >
+      {label ?? "?"}
+    </Tag>
+  );
+  };
+
+  /* 1️⃣1️⃣ Opciones */
   const options: SelectProps["options"] = [
     {
-      label: "Pack Rosado",
-      title: "Pack Rosado",
-      options: ["6", "8", "10", "12", "14"].map((t) => ({
-        label: `Talle ${t}`,
-        value: `rosado-${t}`,
-        disabled:
-          (items.find((i) => i.color.toLowerCase() === "rosado" && i.talle === t)?.cantidad ?? 0) < 2,
-      })),
-    },
-    {
-      label: "Pack Violeta",
-      title: "Pack Violeta",
-      options: ["6", "8", "10", "12", "14"].map((t) => ({
-        label: `Talle ${t}`,
-        value: `violeta-${t}`,
-        disabled:
-          (items.find((i) => i.color.toLowerCase() === "violeta" && i.talle === t)?.cantidad ?? 0) < 2,
-      })),
-    },
-    {
-      label: "Pack Negro",
-      title: "Pack Negro",
-      options: ["6", "8", "10", "12", "14"].map((t) => ({
-        label: `Talle ${t}`,
-        value: `negro-${t}`,
-        disabled:
-          (items.find((i) => i.color.toLowerCase() === "negro" && i.talle === t)?.cantidad ?? 0) < 2,
-      })),
+      label: "Packs disponibles",
+      options: ["6", "8", "10", "12", "14"].flatMap((t) =>
+        ["rosado", "violeta", "negro"].map((color) => ({
+          label: `${color} - Talle ${t}`,
+          value: `${color}-${t}`,
+        }))
+      ),
     },
   ];
 
@@ -299,31 +257,78 @@ const handleDescontar = async () => {
           Inventario por Categorías
         </Typography.Title>
 
+        {/* 🔹 SEPARACIÓN POR TIPO DE CUELLO */}
+        <Divider orientation="center" style={{ marginTop: 30 }}>
+          Cuello V
+        </Divider>
         <div style={{ textAlign: "center", marginBottom: 24 }}>
-          {groups.map((group) => (
-            <Button
-              key={group}
-              type={selectedPacks.includes(group) ? "primary" : "default"}
-              disabled={!selectedPacks.includes(group) && selectedPacks.length >= 4}
-              onClick={() =>
-                setSelectedPacks((prev) =>
-                  prev.includes(group)
-                    ? prev.filter((g) => g !== group)
-                    : [...prev, group]
-                )
-              }
-              style={{ margin: "0 8px 8px 0" }}
-            >
-              {group}
-            </Button>
-          ))}
+          {groups
+            .filter((g) => g.includes("V"))
+            .map((group) => {
+              const color = group.split(" - ")[1] ?? "";
+              return (
+                <Button
+                  key={group}
+                  type={selectedPacks.includes(group) ? "primary" : "default"}
+                  disabled={
+                    !selectedPacks.includes(group) && selectedPacks.length >= 4
+                  }
+                  onClick={() =>
+                    setSelectedPacks((prev) =>
+                      prev.includes(group)
+                        ? prev.filter((g) => g !== group)
+                        : [...prev, group]
+                    )
+                  }
+                  style={{
+                    margin: "0 8px 8px 0",
+                    backgroundColor: getButtonColor(color),
+                    borderColor: "#ccc",
+                    color:  getButtonColor(color)==='#000000'?'#ffffff':'#333',
+                  }}
+                >
+                  {group}
+                </Button>
+              );
+            })}
+        </div>
+
+        <Divider orientation="center">Cuello Redondo</Divider>
+        <div style={{ textAlign: "center", marginBottom: 24 }}>
+          {groups
+            .filter((g) => g.includes("Redondo"))
+            .map((group) => {
+              const color = group.split(" - ")[1] ?? "";
+              return (
+                <Button
+                  key={group}
+                  type={selectedPacks.includes(group) ? "primary" : "default"}
+                  disabled={
+                    !selectedPacks.includes(group) && selectedPacks.length >= 4
+                  }
+                  onClick={() =>
+                    setSelectedPacks((prev) =>
+                      prev.includes(group)
+                        ? prev.filter((g) => g !== group)
+                        : [...prev, group]
+                    )
+                  }
+                  style={{
+                    margin: "0 8px 8px 0",
+                    backgroundColor: getButtonColor(color),
+                    borderColor:  getButtonColor(color),
+                    color:  getButtonColor(color)==='#000000'?'#ffffff':'#333',
+
+                  }}
+                >
+                  {group}
+                </Button>
+              );
+            })}
         </div>
 
         {/* 🔹 SELECT CON TAGS */}
-        <Divider orientation="center" style={{ marginTop: 40 }}>
-          Packs por Color y Talle
-        </Divider>
-
+        <Divider orientation="center">Packs por Color y Talle</Divider>
         <Select
           mode="multiple"
           tagRender={tagRender}
@@ -350,11 +355,12 @@ const handleDescontar = async () => {
           {groupsToShow.map((group) => {
             const [tipo, color, cuello] = group.split(" - ");
             const groupItems = items
-              .filter((i) => i.tipo === tipo && i.color === color && i.cuello === cuello)
+              .filter(
+                (i) => i.tipo === tipo && i.color === color && i.cuello === cuello
+              )
               .sort(
                 (a, b) => (orderMap[a.talle] ?? 999) - (orderMap[b.talle] ?? 999)
               );
-
             if (groupItems.length === 0) return null;
 
             return (
